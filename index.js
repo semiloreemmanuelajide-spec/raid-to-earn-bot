@@ -15,10 +15,18 @@ const readOnlyTwitter = twitterClient.readOnly;
 
 const registrationState = {};
 
-
-// Health-check endpoint for Render & UptimeRobot
-app.get('/', (req, res) => {
-  res.status(200).send('Netwise Raid Bot is active 24/7!');
+// ==========================================
+// HEALTH CHECK & DB KEEP-ALIVE ROUTE
+// ==========================================
+// Pings Aiven MySQL on every UptimeRobot request (5 mins) to prevent DB sleep
+app.get('/', async (req, res) => {
+  try {
+    await sequelize.authenticate();
+    res.status(200).send('Netwise Raid Bot & Aiven Database are active 24/7!');
+  } catch (error) {
+    console.error('Keep-alive DB ping failed:', error.message);
+    res.status(500).send('Database connection waking up...');
+  }
 });
 
 const PORT = process.env.PORT || 3000;
@@ -62,7 +70,7 @@ async function isGroupAdmin(chatId, userId) {
 // 1. DEVELOPER SAAS MANAGEMENT COMMAND
 // ==========================================
 
-// Command for YOU to authorize a group after receiving payment
+// Command to authorize a group after receiving payment
 // Usage: /addgroup <group_id> <days> (e.g., /addgroup -100123456789 30)
 bot.onText(/\/addgroup\s+(\S+)\s+(\d+)/, async (msg, match) => {
   const userId = msg.from.id.toString();
@@ -88,7 +96,11 @@ bot.onText(/\/addgroup\s+(\S+)\s+(\d+)/, async (msg, match) => {
       await group.save();
     }
 
-    bot.sendMessage(msg.chat.id, `✅ Group \`${targetGroupId}\` licensed successfully for ${days} days until${expirationDate.toISOString().split('T')[0]}.`, { parse_mode: 'Markdown' });
+    bot.sendMessage(
+      msg.chat.id, 
+      `✅ Group \`${targetGroupId}\` licensed successfully for ${days} days until${expirationDate.toISOString().split('T')[0]}.`, 
+      { parse_mode: 'Markdown' }
+    );
   } catch (error) {
     console.error('Group licensing error:', error);
     bot.sendMessage(msg.chat.id, '❌ Failed to license group.');
@@ -174,7 +186,7 @@ bot.onText(/\/raid\s+(\S+)(?:\s+(\d+))?/, async (msg, match) => {
   if (!licensed) {
     return bot.sendMessage(
       chatId,
-      `🔒 **Group Not Licensed!**\n\nThis group does not have an active subscription. Contact @YourUsername to purchase a license.`,
+      `🔒 **Group Not Licensed!**\n\nThis group does not have an active subscription. Contact @Nnetwise to purchase a license.`,
       { parse_mode: 'Markdown' }
     );
   }
@@ -219,7 +231,7 @@ bot.on('callback_query', async (query) => {
     const raidId = query.data.replace('verify_raid_', '');
     const user = await User.findOne({ where: { telegramId: query.from.id.toString() } });
 
-    if (!user) return bot.answerCallbackQuery(query.id, { text: 'You must register first! DM @NetwiseBot to /register.', show_alert: true });
+    if (!user) return bot.answerCallbackQuery(query.id, { text: 'You must register first! DM @netwisecombot to /register.', show_alert: true });
 
     const raid = await Raid.findByPk(raidId);
     if (!raid || raid.status !== 'ACTIVE') return bot.answerCallbackQuery(query.id, { text: 'This raid has ended!', show_alert: true });
