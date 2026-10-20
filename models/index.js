@@ -24,13 +24,21 @@ if (process.env.NODE_ENV === 'production' || process.env.MYSQLHOST) {
       dialectOptions: {
         ssl: {
           rejectUnauthorized: false
-        }
+        },
+        connectTimeout: 60000,
+        // Force TCP socket keep-alive to stop cloud firewalls from dropping idle sockets
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10000
       },
       pool: {
-        max: 5,
-        min: 0,
-        acquire: 30000,
-        idle: 10000
+        max: 10,
+        min: 2,         // Keeps 2 warm connections active so cold starts never fail
+        acquire: 60000, // Allows 60s for connection acquisition during peak load
+        idle: 10000,    // Closes idle connections beyond minimum after 10s
+        evict: 10000    // Checks and evicts dead/broken connections every 10s
+      },
+      retry: {
+        max: 3          // Automatically retries failed queries up to 3 times before erroring out
       }
     }
   );
